@@ -1,0 +1,67 @@
+// Cloud-build compat: the MSVC 14.11 STL only ships the Filesystem TS (std::experimental::filesystem).
+#pragma once
+#include_next <filesystem>
+
+namespace std {
+namespace filesystem {
+using namespace std::experimental::filesystem;
+
+inline path relative(const path& p, const path& base, error_code& ec) {
+    ec.clear();
+    path a = absolute(p);
+    path b = absolute(base);
+    auto ai = a.begin();
+    auto bi = b.begin();
+    while (ai != a.end() && bi != b.end() && *ai == *bi) {
+        ++ai;
+        ++bi;
+    }
+    path result;
+    for (; bi != b.end(); ++bi) {
+        if (!bi->empty()) {
+            result /= "..";
+        }
+    }
+    for (; ai != a.end(); ++ai) {
+        result /= *ai;
+    }
+    return result;
+}
+// C++17 directory_entry observers that the TS lacks.
+class directory_entry : public experimental::filesystem::directory_entry {
+public:
+    directory_entry() = default;
+    directory_entry(const experimental::filesystem::directory_entry& entry) : experimental::filesystem::directory_entry(entry) {}
+
+    bool is_regular_file(error_code& ec) const { return experimental::filesystem::is_regular_file(path(), ec); }
+    bool is_directory(error_code& ec) const { return experimental::filesystem::is_directory(path(), ec); }
+    uintmax_t file_size(error_code& ec) const { return experimental::filesystem::file_size(path(), ec); }
+};
+
+class recursive_directory_iterator {
+public:
+    recursive_directory_iterator() = default;
+    recursive_directory_iterator(const path& p, error_code& ec) : m_it(p, ec) {}
+
+    recursive_directory_iterator& increment(error_code& ec) {
+        m_it.increment(ec);
+        return *this;
+    }
+
+    const directory_entry& operator*() const {
+        m_entry = *m_it;
+        return m_entry;
+    }
+
+    const directory_entry* operator->() const { return &**this; }
+    int depth() const { return m_it.depth(); }
+    void disable_recursion_pending() { m_it.disable_recursion_pending(); }
+    bool operator==(const recursive_directory_iterator& other) const { return m_it == other.m_it; }
+    bool operator!=(const recursive_directory_iterator& other) const { return m_it != other.m_it; }
+
+private:
+    experimental::filesystem::recursive_directory_iterator m_it;
+    mutable directory_entry m_entry;
+};
+} // namespace filesystem
+} // namespace std
